@@ -335,6 +335,329 @@ app.delete("/api/libros/:id", async (req, res) => {
   }
 });
 
+app.get("/api/usuarios", async (req, res) => {
+  try {
+    const [usuarios] = await pool.execute(`
+      SELECT id, nombre, correo, telefono
+      FROM usuarios
+      ORDER BY id
+    `);
+
+    res.status(200).json(usuarios);
+  } catch (error) {
+    console.error("Error al consultar usuarios:", error.code);
+
+    res.status(500).json({
+      mensaje: "No se pudieron consultar los usuarios"
+    });
+  }
+});
+
+app.post("/api/usuarios", async (req, res) => {
+  const datos = req.body;
+
+  if (!datos || typeof datos !== "object" || Array.isArray(datos)) {
+    return res.status(400).json({
+      mensaje: "Debes enviar un objeto JSON con los datos del usuario"
+    });
+  }
+
+  const { nombre, correo, telefono } = datos;
+
+  if (
+    typeof nombre !== "string" ||
+    !nombre.trim() ||
+    nombre.trim().length > 150
+  ) {
+    return res.status(400).json({
+      mensaje: "El nombre es obligatorio y admite hasta 150 caracteres"
+    });
+  }
+
+  if (
+    typeof correo !== "string" ||
+    correo.trim().length > 254 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo.trim())
+  ) {
+    return res.status(400).json({
+      mensaje: "Debes ingresar un correo electrónico válido"
+    });
+  }
+
+  if (
+    telefono !== undefined &&
+    telefono !== null &&
+    (
+      typeof telefono !== "string" ||
+      (
+        telefono.trim() !== "" &&
+        !/^[+0-9()\s-]{7,25}$/.test(telefono.trim())
+      )
+    )
+  ) {
+    return res.status(400).json({
+      mensaje: "El teléfono debe contener entre 7 y 25 caracteres válidos"
+    });
+  }
+
+  const usuario = {
+    nombre: nombre.trim(),
+    correo: correo.trim().toLowerCase(),
+    telefono:
+      typeof telefono === "string" ? telefono.trim() || null : null
+  };
+
+  try {
+    const [resultado] = await pool.execute(
+      `INSERT INTO usuarios (nombre, correo, telefono)
+       VALUES (?, ?, ?)`,
+      [usuario.nombre, usuario.correo, usuario.telefono]
+    );
+
+    res.status(201).json({
+      mensaje: "Usuario registrado correctamente",
+      usuario: {
+        id: resultado.insertId,
+        ...usuario
+      }
+    });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        mensaje: "Ya existe un usuario con ese correo"
+      });
+    }
+
+    console.error("Error al registrar usuario:", error.code);
+
+    res.status(500).json({
+      mensaje: "No se pudo registrar el usuario"
+    });
+  }
+});
+
+app.post("/api/prestamos", async (req, res) => {
+  const datos = req.body;
+
+  if (!datos || typeof datos !== "object" || Array.isArray(datos)) {
+    return res.status(400).json({
+      mensaje: "Debes enviar un objeto JSON con los datos del préstamo"
+    });
+  }
+
+  const { libro_id, usuario_id, fecha_limite } = datos;
+
+  if (
+    !Number.isSafeInteger(libro_id) ||
+    libro_id <= 0 ||
+    !Number.isSafeInteger(usuario_id) ||
+    usuario_id <= 0
+  ) {
+    return res.status(400).json({
+      mensaje: "libro_id y usuario_id deben ser números enteros positivos"
+    });
+  }
+
+  if (
+    typeof fecha_limite !== "string" ||
+    !/^[1-9]\d{3}-\d{2}-\d{2}$/.test(fecha_limite)
+  ) {
+    return res.status(400).json({
+      mensaje: "La fecha límite debe tener el formato AAAA-MM-DD"
+    });
+  }
+
+  const fecha = new Date(`${fecha_limite}T00:00:00.000Z`);
+
+  if (
+    Number.isNaN(fecha.getTime()) ||
+    fecha.toISOString().slice(0, 10) !== fecha_limite
+  ) {
+    return res.status(400).json({
+      mensaje: "La fecha límite no es una fecha válida"
+    });
+  }
+
+  let conexion;
+
+  try {
+    conexion = await pool.getConnection();
+    await conexion.beginTransaction();
+
+    const rechazar = async (estado, mensaje) => {
+      await conexion.rollback();
+      return res.status(estado).json({ mensaje });
+    };
+
+    // Bloquea el ejemplar mientras se registra el préstamo.
+    const [libros] = await conexion.execute(
+      "SELECT id FROM libros WHERE id = ? FOR UPDATE",
+      [libro_id]
+    );
+
+    if (libros.length === 0) {
+      return await rechazar(404, "Libro no encontrado");
+    }
+
+    const [usuarios] = await conexion.execute(
+      "SELECT id FROM usuarios WHERE id = ? FOR SHARE",
+      [usuario_id]
+    );
+
+    if (usuarios.length === 0) {
+      return await rechazar(404, "Usuario no encontrado");
+    }
+
+    const [validacionFecha] = await conexion.execute(
+      "SELECT CAST(? AS DATE) >= CURDATE() AS valida",
+      [fecha_limite]
+    );
+
+    if (!validacionFecha[0].valida) {
+      return await rechazar(
+        400,
+        "La fecha límite no puede ser anterior a hoy"
+      );
+    }
+
+    const [activos] = await conexion.execute(
+      `SELECT id
+       FROM prestamos
+       WHERE libro_id = ?
+         AND fecha_devolucion IS NULL
+       FOR UPDATE`,
+      [libro_id]
+    );
+
+    if (activos.length > 0) {
+      return await rechazar(
+        409,
+        "El ejemplar ya está prestado y todavía no ha sido devuelto"
+      );
+    }
+
+    const [resultado] = await conexion.execute(
+      `INSERT INTO prestamos (
+         libro_id, usuario_id, fecha_prestamo, fecha_limite
+       )
+       VALUES (?, ?, NOW(), ?)`,
+      [libro_id, usuario_id, fecha_limite]
+    );
+
+    await conexion.commit();
+
+    res.status(201).json({
+      mensaje: "Préstamo registrado correctamente",
+      prestamo: {
+        id: resultado.insertId,
+        libro_id,
+        usuario_id,
+        fecha_limite,
+        estado: "Activo"
+      }
+    });
+  } catch (error) {
+    if (conexion) {
+      try {
+        await conexion.rollback();
+      } catch (errorRollback) {
+        console.error("Error al revertir:", errorRollback.code);
+      }
+    }
+
+    console.error("Error al registrar préstamo:", error.code);
+
+    res.status(500).json({
+      mensaje: "No se pudo registrar el préstamo"
+    });
+  } finally {
+    if (conexion) {
+      conexion.release();
+    }
+  }
+});
+
+app.get("/api/prestamos", async (req, res) => {
+  try {
+    const [prestamos] = await pool.execute(`
+      SELECT
+        p.id AS prestamo_id,
+        l.id AS libro_id,
+        l.codigo,
+        l.titulo,
+        u.id AS usuario_id,
+        u.nombre AS usuario,
+        p.fecha_prestamo,
+        p.fecha_limite,
+        p.fecha_devolucion,
+        CASE
+          WHEN p.fecha_devolucion IS NOT NULL THEN 'Devuelto'
+          WHEN p.fecha_limite < CURDATE() THEN 'Vencido'
+          ELSE 'Activo'
+        END AS estado
+      FROM prestamos p
+      INNER JOIN libros l ON l.id = p.libro_id
+      INNER JOIN usuarios u ON u.id = p.usuario_id
+      ORDER BY p.fecha_prestamo DESC, p.id DESC
+    `);
+
+    res.status(200).json(prestamos);
+  } catch (error) {
+    console.error("Error al consultar préstamos:", error.code);
+
+    res.status(500).json({
+      mensaje: "No se pudo consultar el historial de préstamos"
+    });
+  }
+});
+app.put("/api/prestamos/:id/devolucion", async (req, res) => {
+  const id = Number(req.params.id);
+
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    return res.status(400).json({
+      mensaje: "El ID del préstamo debe ser un entero positivo"
+    });
+  }
+
+  try {
+    const [resultado] = await pool.execute(
+      `UPDATE prestamos
+       SET fecha_devolucion = NOW()
+       WHERE id = ?
+         AND fecha_devolucion IS NULL`,
+      [id]
+    );
+
+    if (resultado.affectedRows === 0) {
+      const [prestamos] = await pool.execute(
+        "SELECT id FROM prestamos WHERE id = ?",
+        [id]
+      );
+
+      if (prestamos.length === 0) {
+        return res.status(404).json({
+          mensaje: "Préstamo no encontrado"
+        });
+      }
+
+      return res.status(409).json({
+        mensaje: "Este préstamo ya fue devuelto"
+      });
+    }
+
+    res.status(200).json({
+      mensaje: "Devolución registrada correctamente",
+      prestamo_id: id
+    });
+  } catch (error) {
+    console.error("Error al registrar devolución:", error.code);
+
+    res.status(500).json({
+      mensaje: "No se pudo registrar la devolución"
+    });
+  }
+});
+
 app.use((req, res) => {
   res.status(404).json({
     mensaje: "Ruta no encontrada"
