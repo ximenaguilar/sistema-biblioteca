@@ -12,11 +12,7 @@ const PORT = Number(process.env.PORT || 3000);
 
 app.use(express.json({ limit: "10kb" }));
 
-app.get("/", (req, res) => {
-  res.json({
-    mensaje: "API del Sistema de Gestión de Biblioteca"
-  });
-});
+app.use(express.static(path.join(__dirname, "..", "public")));
 
 app.get("/api/health", async (req, res) => {
   try {

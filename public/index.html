@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Biblioteca | Gestión de préstamos</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="contenedor">
+      <p class="etiqueta">SISTEMA DE GESTIÓN</p>
+      <h1>Biblioteca</h1>
+      <p>Administra ejemplares, lectores y préstamos.</p>
+    </div>
+  </header>
+
+  <main class="contenedor">
+    <nav aria-label="Secciones">
+      <button type="button" data-vista="libros"
+              aria-pressed="true">Libros</button>
+      <button type="button" data-vista="usuarios"
+              aria-pressed="false">Usuarios</button>
+      <button type="button" data-vista="prestamos"
+              aria-pressed="false">Préstamos</button>
+    </nav>
+
+    <p id="mensaje" role="status" aria-live="polite">
+      Cargando información…
+    </p>
+
+    <section id="vista-libros">
+      <h2>Catálogo de ejemplares</h2>
+
+      <form id="form-libro" class="tarjeta">
+        <h3 id="titulo-form-libro">Registrar libro</h3>
+        <input type="hidden" id="libro-id">
+
+        <div class="campos">
+          <label>Código del ejemplar
+            <input id="libro-codigo" required maxlength="30">
+          </label>
+
+          <label>Título
+            <input id="libro-titulo" required maxlength="200">
+          </label>
+
+          <label>Autor
+            <input id="libro-autor" required maxlength="150">
+          </label>
+
+          <label>ISBN opcional
+            <input id="libro-isbn" maxlength="20">
+          </label>
+        </div>
+
+        <button type="submit">Guardar libro</button>
+        <button type="button" id="cancelar-libro" class="secundario">
+          Limpiar formulario
+        </button>
+      </form>
+
+      <label class="buscador">Buscar por código, título o autor
+        <input id="buscar-libro" type="search"
+               placeholder="Escribe para buscar">
+      </label>
+
+      <div class="tabla">
+        <table>
+          <caption>Libros registrados</caption>
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Título</th>
+              <th>Autor</th>
+              <th>Disponibilidad</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="lista-libros"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="vista-usuarios" hidden>
+      <h2>Usuarios de la biblioteca</h2>
+
+      <form id="form-usuario" class="tarjeta">
+        <h3>Registrar usuario</h3>
+
+        <div class="campos">
+          <label>Nombre completo
+            <input id="usuario-nombre" required maxlength="150">
+          </label>
+
+          <label>Correo electrónico
+            <input id="usuario-correo" type="email"
+                   required maxlength="254">
+          </label>
+
+          <label>Teléfono opcional
+            <input id="usuario-telefono" type="tel" maxlength="25">
+          </label>
+        </div>
+
+        <button type="submit">Guardar usuario</button>
+      </form>
+
+      <div class="tabla">
+        <table>
+          <caption>Usuarios registrados</caption>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nombre</th>
+              <th>Correo</th>
+              <th>Teléfono</th>
+            </tr>
+          </thead>
+          <tbody id="lista-usuarios"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="vista-prestamos" hidden>
+      <h2>Préstamos e historial</h2>
+
+      <form id="form-prestamo" class="tarjeta">
+        <h3>Registrar préstamo</h3>
+
+        <div class="campos">
+          <label>Ejemplar disponible
+            <select id="prestamo-libro" required></select>
+          </label>
+
+          <label>Usuario
+            <select id="prestamo-usuario" required></select>
+          </label>
+
+          <label>Fecha límite
+            <input id="prestamo-fecha" type="date" required>
+          </label>
+        </div>
+
+        <button type="submit">Registrar préstamo</button>
+      </form>
+
+      <div class="tabla">
+        <table>
+          <caption>Historial de préstamos</caption>
+          <thead>
+            <tr>
+              <th>Préstamo</th>
+              <th>Ejemplar</th>
+              <th>Usuario</th>
+              <th>Fecha de préstamo</th>
+              <th>Fecha límite</th>
+              <th>Devolución</th>
+              <th>Estado</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="lista-prestamos"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="contenedor">
+    Proyecto final de Desarrollo Web
+  </footer>
+</body>
+</html>
