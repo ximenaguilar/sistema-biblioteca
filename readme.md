@@ -85,7 +85,7 @@ Los datos se almacenan permanentemente en MySQL.
 Descargar y descomprimir el repositorio, o ejecutar:
 
 ```bash
-git clone URL_DEL_REPOSITORIO
+git clone (https://github.com/ximenaguilar/sistema-biblioteca)
 ```
 
 Abrir una terminal dentro de la carpeta que contiene package.json.
